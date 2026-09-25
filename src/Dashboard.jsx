@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const ACTIVE_MATCH_KEY = "kabaddi_active_match";
 import Scoreboard from "./Scoreboard";
 
 const defaultConfig = {
@@ -15,6 +17,21 @@ const defaultConfig = {
 export default function Dashboard() {
   const [config, setConfig] = useState(defaultConfig);
   const [started, setStarted] = useState(false);
+  const [savedMatch, setSavedMatch] = useState(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ACTIVE_MATCH_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      if (parsed?.config && parsed?.state) {
+        setSavedMatch(parsed);
+      }
+    } catch (error) {
+      console.error("Unable to restore saved match:", error);
+    }
+  }, []);
 
   const updateConfig = (key, value) => {
     setConfig((prev) => ({
@@ -27,10 +44,33 @@ export default function Dashboard() {
     return (
       <Scoreboard
         config={config}
-        onExit={() => setStarted(false)}
+        onExit={() => {
+          setStarted(false);
+          setSavedMatch(null);
+        }}
       />
     );
   }
+
+  const resumeMatch = () => {
+    if (!savedMatch?.config) return;
+    setConfig(savedMatch.config);
+    setStarted(true);
+  };
+
+  const startNewMatch = () => {
+    if (savedMatch) {
+      const confirmed = window.confirm(
+        "A saved match is available. Starting a new match will replace it. Continue?"
+      );
+      if (!confirmed) return;
+    }
+
+    localStorage.removeItem(ACTIVE_MATCH_KEY);
+    setSavedMatch(null);
+    setConfig(defaultConfig);
+    setStarted(true);
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -55,6 +95,43 @@ export default function Dashboard() {
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pb-10 pt-6">
+        {savedMatch && (
+          <section className="mb-5 rounded-3xl border border-yellow-500/30 bg-yellow-500/10 p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-yellow-500/15 text-xl">
+                ↻
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-black text-yellow-300">
+                  Match saved automatically
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  {savedMatch.config.teamA} {savedMatch.state.scoreA} —{" "}
+                  {savedMatch.state.scoreB} {savedMatch.config.teamB}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Your match can be resumed after a refresh or reopening the app.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                onClick={resumeMatch}
+                className="rounded-xl bg-yellow-500 py-3 font-black text-slate-950 hover:bg-yellow-400"
+              >
+                RESUME MATCH
+              </button>
+              <button
+                onClick={startNewMatch}
+                className="rounded-xl bg-slate-800 py-3 font-black text-white hover:bg-slate-700"
+              >
+                NEW MATCH
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* HERO */}
 
         <section className="rounded-3xl border border-slate-800 bg-gradient-to-br from-blue-600/20 via-slate-900 to-slate-900 p-6">
@@ -276,7 +353,7 @@ export default function Dashboard() {
           </div>
 
           <button
-            onClick={() => setStarted(true)}
+            onClick={startNewMatch}
             disabled={
               !config.teamA.trim() ||
               !config.teamB.trim()

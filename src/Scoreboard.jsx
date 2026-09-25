@@ -1,5 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 
+const ACTIVE_MATCH_KEY = "kabaddi_active_match";
+
+const readSavedMatch = () => {
+  try {
+    const raw = localStorage.getItem(ACTIVE_MATCH_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return parsed?.state ? parsed : null;
+  } catch (error) {
+    console.error("Unable to read saved match:", error);
+    return null;
+  }
+};
+
 const clamp = (value, min, max) =>
   Math.min(Math.max(value, min), max);
 
@@ -35,31 +50,53 @@ export default function Scoreboard({ config, onExit }) {
   const halfDuration = halfMinutes * 60;
   const breakDuration = breakMinutes * 60;
 
-  const [scoreA, setScoreA] = useState(0);
-  const [scoreB, setScoreB] = useState(0);
+  const savedMatch = readSavedMatch();
+  const savedState = savedMatch?.state;
 
-  const [currentHalf, setCurrentHalf] = useState(1);
-
-  const [matchTime, setMatchTime] = useState(halfDuration);
-  const [raidTime, setRaidTime] = useState(raidSeconds);
-
-  const [matchRunning, setMatchRunning] = useState(false);
-  const [raidRunning, setRaidRunning] = useState(false);
-
-  const [breakRunning, setBreakRunning] = useState(false);
-  const [breakTime, setBreakTime] = useState(breakDuration);
-
-  const [matchFinished, setMatchFinished] = useState(false);
+  const [scoreA, setScoreA] = useState(() => savedState?.scoreA ?? 0);
+  const [scoreB, setScoreB] = useState(() => savedState?.scoreB ?? 0);
+  const [currentHalf, setCurrentHalf] = useState(
+    () => savedState?.currentHalf ?? 1
+  );
+  const [matchTime, setMatchTime] = useState(
+    () => savedState?.matchTime ?? halfDuration
+  );
+  const [raidTime, setRaidTime] = useState(
+    () => savedState?.raidTime ?? raidSeconds
+  );
+  const [matchRunning, setMatchRunning] = useState(
+    () => savedState?.matchRunning ?? false
+  );
+  const [raidRunning, setRaidRunning] = useState(
+    () => savedState?.raidRunning ?? false
+  );
+  const [breakRunning, setBreakRunning] = useState(
+    () => savedState?.breakRunning ?? false
+  );
+  const [breakTime, setBreakTime] = useState(
+    () => savedState?.breakTime ?? breakDuration
+  );
+  const [matchFinished, setMatchFinished] = useState(
+    () => savedState?.matchFinished ?? false
+  );
 
   // A = Team A is raiding
   // B = Team B is raiding
-  const [activeTeam, setActiveTeam] = useState("A");
+  const [activeTeam, setActiveTeam] = useState(
+    () => savedState?.activeTeam ?? "A"
+  );
 
   // Consecutive empty raids for each team.
-  const [emptyRaidsA, setEmptyRaidsA] = useState(0);
-  const [emptyRaidsB, setEmptyRaidsB] = useState(0);
+  const [emptyRaidsA, setEmptyRaidsA] = useState(
+    () => savedState?.emptyRaidsA ?? 0
+  );
+  const [emptyRaidsB, setEmptyRaidsB] = useState(
+    () => savedState?.emptyRaidsB ?? 0
+  );
 
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(
+    () => savedState?.history ?? []
+  );
 
   // --------------------------------------------------
   // DERIVED STATE
@@ -85,6 +122,71 @@ export default function Scoreboard({ config, onExit }) {
       : scoreB > scoreA
       ? teamB
       : "Draw";
+
+  // --------------------------------------------------
+  // AUTO-SAVE MATCH
+  // --------------------------------------------------
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        ACTIVE_MATCH_KEY,
+        JSON.stringify({
+          version: 1,
+          savedAt: Date.now(),
+          config: {
+            teamA,
+            teamB,
+            halfMinutes,
+            halves,
+            raidSeconds,
+            breakMinutes,
+            soundEnabled,
+          },
+          state: {
+            scoreA,
+            scoreB,
+            currentHalf,
+            matchTime,
+            raidTime,
+            matchRunning,
+            raidRunning,
+            breakRunning,
+            breakTime,
+            matchFinished,
+            activeTeam,
+            emptyRaidsA,
+            emptyRaidsB,
+            history,
+          },
+        })
+      );
+    } catch (error) {
+      console.error("Unable to save match:", error);
+    }
+  }, [
+    teamA,
+    teamB,
+    halfMinutes,
+    halves,
+    raidSeconds,
+    breakMinutes,
+    soundEnabled,
+    scoreA,
+    scoreB,
+    currentHalf,
+    matchTime,
+    raidTime,
+    matchRunning,
+    raidRunning,
+    breakRunning,
+    breakTime,
+    matchFinished,
+    activeTeam,
+    emptyRaidsA,
+    emptyRaidsB,
+    history,
+  ]);
 
   // --------------------------------------------------
   // SOUND
@@ -722,11 +824,15 @@ export default function Scoreboard({ config, onExit }) {
 
   function exitMatch() {
     const confirmed = window.confirm(
-      "Exit this match?"
+      "Exit this match? The saved match will be cleared."
     );
 
-    if (confirmed && onExit) {
-      onExit();
+    if (confirmed) {
+      localStorage.removeItem(ACTIVE_MATCH_KEY);
+
+      if (onExit) {
+        onExit();
+      }
     }
   }
 
